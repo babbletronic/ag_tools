@@ -5,6 +5,9 @@ framing, solid deformed boards, framed openings, geometric light leakage, and
 camera visibility profiles. Developed and tested with **Blender 4.3.2**.
 No third-party Python dependencies are required. Current add-on version: **1.1.0**.
 
+For a full explanation of every control, defaults, interactions, and practical
+recipes, see the **[Parameter Guide](docs/PARAMETER_GUIDE.md)**.
+
 ## Install and generate
 
 1. Download [old_shed_builder.zip](downloads/old_shed_builder.zip) from GitHub
