@@ -1,6 +1,9 @@
 """Opaque procedural timber: longitudinal grain, weathering and board variation."""
 
 import bpy
+import json
+import math
+from .uvs import group_for
 from .wood import rng_for
 
 
@@ -33,7 +36,13 @@ def wood_material(ctx, s, axis=0):
     scales = [72, 72, 72]
     scales[axis] = 2.5
     scale.inputs[1].default_value = scales
-    link(coord.outputs["Generated"], scale.inputs[0])
+    grain_uv = node(t, "ShaderNodeUVMap", "Local grain coordinates", -1000, 350)
+    grain_uv.uv_map = "WoodGrain"
+    link(grain_uv.outputs["UV"], scale.inputs[0])
+    atlas_uv = node(
+        t, "ShaderNodeUVMap", "UVMap — image painting / baking atlas", -1000, 550
+    )
+    atlas_uv.uv_map = "UVMap"
     noise = node(t, "ShaderNodeTexNoise", "Nonrepeating wood fibers", -600, 250)
     noise.inputs["Scale"].default_value = 2.0
     noise.inputs["Detail"].default_value = 4
@@ -121,31 +130,54 @@ def simple(ctx, name, color, roughness, metallic=0, transmission=0):
     return mat
 
 
-def assign(ctx, s, objects=None):
-    materials = {("Wood", i): wood_material(ctx, s, i) for i in range(3)}
-    materials.update(
-        {
-            ("Metal", 0): simple(ctx, "Metal", (0.085, 0.052, 0.027), 0.62, 0.8),
-            ("Glass", 0): simple(
-                ctx, "Glass", (0.86, 0.94, 0.90), 0.09, transmission=1
-            ),
-            ("Concrete", 0): simple(ctx, "Concrete", (0.22, 0.21, 0.18), 0.94),
-        }
+def assign(ctx, s, objects=None, reuse=()):
+    objects = list(objects if objects is not None else bpy.data.objects)
+    members = [
+        o for o in objects if o.type == "MESH" and o.get("shed_owner") == ctx.owner
+    ]
+    groups = {
+        o.get("shed_uv_group", group_for(o)): o.get("shed_material", "Wood")
+        for o in members
+    }
+    materials = {}
+    previous = json.loads(ctx.root.get("shed_settings", "{}"))
+    fields = ("aging", "roughness", "grain", "dirt", "water", "color_variation")
+    same = all(
+        math.isclose(
+            previous.get(k, getattr(s, k)), getattr(s, k), abs_tol=1e-7, rel_tol=1e-6
+        )
+        for k in fields
     )
-    for obj in objects if objects is not None else list(bpy.data.objects):
-        if obj.get("shed_owner") != ctx.owner or obj.type != "MESH":
+    if same:
+        for obj in reuse:
+            if obj.type != "MESH":
+                continue
+            for mat in obj.data.materials:
+                if (
+                    mat
+                    and mat.get("shed_uv_group") in groups
+                    and mat.get("shed_signature") == fingerprint(mat)
+                ):
+                    materials[mat["shed_uv_group"]] = mat
+    for group, kind in sorted(groups.items()):
+        if group in materials:
             continue
-        kind = obj.get("shed_material", "Wood")
-        axis = 0
-        if kind == "Wood" and not obj.get("shed_plank"):
-            ranges = [
-                max(v.co[i] for v in obj.data.vertices)
-                - min(v.co[i] for v in obj.data.vertices)
-                for i in range(3)
-            ]
-            axis = max(range(3), key=lambda i: ranges[i])
+        if kind == "Wood":
+            mat = wood_material(ctx, s)
+        elif kind == "Metal":
+            mat = simple(ctx, "Metal", (0.085, 0.052, 0.027), 0.62, 0.8)
+        elif kind == "Glass":
+            mat = simple(ctx, "Glass", (0.86, 0.94, 0.90), 0.09, transmission=1)
+        else:
+            mat = simple(ctx, "Concrete", (0.22, 0.21, 0.18), 0.94)
+        mat.name = f"Old Shed {ctx.owner} • {group}"
+        mat["shed_uv_group"] = group
+        mat["shed_signature"] = fingerprint(mat)
+        materials[group] = mat
+    for obj in members:
+        group = obj.get("shed_uv_group", group_for(obj))
         obj.data.materials.clear()
-        obj.data.materials.append(materials[(kind, axis)])
+        obj.data.materials.append(materials[group])
         value = rng_for(s.seed, obj["shed_key"]).uniform(0.45, 1)
         obj.color = (value, value * 0.97, value * 0.91, 1)
     return list(materials.values())

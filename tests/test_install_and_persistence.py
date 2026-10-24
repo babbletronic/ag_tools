@@ -15,6 +15,7 @@ assert result == {"FINISHED"}, result
 import old_shed_builder
 
 assert "/tmp/" in old_shed_builder.__file__, old_shed_builder.__file__
+assert old_shed_builder.bl_info["version"] == (1, 1, 0)
 from old_shed_builder import properties, generator, visibility
 from old_shed_builder.model import validate
 
@@ -39,4 +40,16 @@ assert len(generator.owned(root)) == count
 visibility.set_part(root, "roof_covering", viewport=False, render=True)
 assert not visibility.state(root)["roof_covering"]["viewport"]
 visibility.restore_profile(root, "Exterior")
-print("ZIP INSTALL, NEW SCENE DEFAULTS, FRESH-PROCESS PERSISTENCE PASS")
+assert all(
+    o.data.uv_layers.get("UVMap") for o in generator.owned(root) if o.type == "MESH"
+)
+bpy.ops.wm.open_mainfile(filepath=str(ROOT / "artifacts" / "v11_crooked_uv.blend"))
+root = bpy.context.scene.old_shed_root
+settings = properties.from_rna(bpy.context.scene.old_shed_settings)
+assert settings.crooked == 1 and settings.gap_randomizer == 1
+assert settings.gap_weight == 2
+assert any(abs(o.get("shed_crooked_angle", 0)) > 0.01 for o in generator.owned(root))
+assert all(
+    o.data.uv_layers.get("UVMap") for o in generator.owned(root) if o.type == "MESH"
+)
+print("V1.1 ZIP INSTALL, NEW SCENE DEFAULTS, UV / PARAMETER PERSISTENCE PASS")

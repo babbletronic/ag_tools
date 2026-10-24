@@ -38,6 +38,8 @@ RANGES = {
     "rafter_spacing": (0.25, 1.2),
     "ridge_thickness": (0.025, 0.12),
     "door_angle": (-170, 170),
+    "gap_weight": (0.05, 8),
+    "broken_max_percent": (0, 95),
     "bow": (0, 0.06),
     "twist": (0, 12),
     "cup": (0, 0.02),
@@ -55,7 +57,12 @@ DESCRIPTIONS = {
     "bow": "Lengthwise bow, limited to 65% of board thickness to limit intersections",
     "cup": "Cross-sectional cup, limited to 35% of board thickness",
     "split": "Maximum end-split length, further limited to 14% of plank length",
-    "broken": "Probability of a shortened, damaged plank end",
+    "broken": "Probability of damage at a randomly selected start, end, or both ends",
+    "broken_max_percent": "Maximum combined length removed from a board, as percent of original length",
+    "gap_randomizer": "Blend from regular spacing (0) to weighted random gaps from zero to the configured maximum (1)",
+    "gap_weight": "Below 1 favors no gap; above 1 favors the maximum gap; 1 is uniform",
+    "crooked": "Rotate wall boards in-plane within available neighbor gaps; 1 uses the full safe clearance",
+    "header_depth": "Window header height; the door header follows Stud width",
     "variation": "Scales wood deformation and damage; zero creates straight sound boards",
     "leakage": "Scales physical gaps, missing pieces and detached ends in siding",
     "dramatic": "Amplifies leakage by 1.8 and permits gaps up to 65% of board width",
@@ -144,9 +151,22 @@ for f in fields(Settings):
     if f.name in ("schema", "door", "window_a", "window_b", "walls"):
         continue
     value = getattr(Settings(), f.name)
-    name = f.name.replace("_", " ").capitalize()
+    name = {
+        "gap_weight": "Gap random weight",
+        "broken_max_percent": "Max broken length (%)",
+        "header_depth": "Window header height",
+    }.get(f.name, f.name.replace("_", " ").capitalize())
     kw = {"name": name, "description": DESCRIPTIONS.get(f.name, name)}
-    if isinstance(value, bool):
+    if f.name == "door_hinge":
+        prop = EnumProperty(
+            name="Door hinge side",
+            default=value,
+            items=[
+                ("LEFT", "Left", "Hinges on the left when viewed from outside"),
+                ("RIGHT", "Right", "Hinges on the right when viewed from outside"),
+            ],
+        )
+    elif isinstance(value, bool):
         prop = BoolProperty(default=value, **kw)
     elif isinstance(value, int):
         prop = IntProperty(default=value, min=0, max=2147483647, **kw)
@@ -154,7 +174,15 @@ for f in fields(Settings):
         low, high = RANGES.get(f.name, (0, 1))
         unit = (
             "LENGTH"
-            if f.name in RANGES and f.name not in ("roof_pitch", "door_angle", "twist")
+            if f.name in RANGES
+            and f.name
+            not in (
+                "roof_pitch",
+                "door_angle",
+                "twist",
+                "gap_weight",
+                "broken_max_percent",
+            )
             else "NONE"
         )
         prop = FloatProperty(

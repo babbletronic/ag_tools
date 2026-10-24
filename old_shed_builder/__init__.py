@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Old Shed Builder",
     "author": "ag_tools",
-    "version": (1, 0, 0),
+    "version": (1, 1, 0),
     "blender": (4, 3, 0),
     "location": "View3D > Sidebar > Old Shed",
     "description": "Procedural timber shed with geometric deterioration and cinematic visibility",

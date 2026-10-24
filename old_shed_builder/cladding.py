@@ -84,6 +84,10 @@ def build(ctx, s):
                 for seg, (a, b) in enumerate(subtract((l, r), cuts)):
                     if b - a < 0.01:
                         continue
+                    fit_a, fit_b = a, b
+                    inset = min(0.005, (b - a) * 0.02) * s.crooked
+                    a += inset
+                    b -= inset
                     top = None
                     breaks = []
                     if gable and high > s.wall_height:
@@ -145,6 +149,19 @@ def build(ctx, s):
                         breaks=breaks,
                     )
                     obj["shed_wall"] = wall
+                    obj["shed_course"] = row
+                    obj["shed_plan_bounds"] = [fit_a, fit_b, low, high]
+                    obj["shed_roof_limit"] = [
+                        height,
+                        k if gable else 0,
+                        s.wall_height
+                        + roof_thickness
+                        + k * (s.width / 2 - s.stud_depth),
+                    ]
+                    obj["shed_openings"] = [
+                        value for obstacle in obstacles for value in obstacle
+                    ]
+                    obj["shed_reverse"] = reverse
                     obj["shed_leak_loose"] = rng.random() < min(
                         0.9, leakage.loose * amount
                     )
@@ -177,12 +194,28 @@ def build(ctx, s):
                     if points:
                         obj["shed_supports"] = sorted(points)
 
-            gap_rng = rng_for(s.leak_seed, f"{wall}.gap.{row}")
-            gap = s.plank_gap + leakage.gap * amount * (
-                1 + gap_rng.uniform(-1, 1) * leakage.variation
-            )
-            if gap_rng.random() < leakage.large_probability * amount:
-                gap += s.plank_width * 0.22 * amount
-            gap = min(gap, s.plank_width * (0.65 if s.dramatic else 0.35))
+            gap = course_gap(s, wall, row, leakage, amount)
             bottom = upper + gap
             row += 1
+
+
+def course_gap(s, wall, row, leakage=None, amount=None):
+    """Weighted bounded spacing; full randomization ranges from zero to max."""
+    leakage = leakage or s.leak(wall)
+    if amount is None:
+        amount = leakage.amount * (1.8 if s.dramatic else 1)
+    rng = rng_for(s.leak_seed, f"{wall}.gap.{row}")
+    sample = rng.random() ** (1 / s.gap_weight)
+    ordinary = s.plank_gap + leakage.gap * amount * (
+        1 + (2 * sample - 1) * leakage.variation
+    )
+    maximum = s.plank_gap + leakage.gap * amount * (1 + leakage.variation)
+    if rng.random() < leakage.large_probability * amount:
+        ordinary += s.plank_width * 0.22 * amount
+        maximum += s.plank_width * 0.22 * amount
+    cap = s.plank_width * (0.65 if s.dramatic else 0.35)
+    return max(
+        0,
+        min(cap, ordinary) * (1 - s.gap_randomizer)
+        + min(cap, maximum) * sample * s.gap_randomizer,
+    )

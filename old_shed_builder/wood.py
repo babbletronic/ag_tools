@@ -31,6 +31,7 @@ def board(
         return i * (ny + 1) + j
 
     faces = []
+    face_labels = []
     for i in range(nx):
         for j in range(ny):
             a = idx(i, j)
@@ -38,18 +39,27 @@ def board(
             c = idx(i + 1, j + 1)
             d = idx(i, j + 1)
             faces.extend([(d, c, b, a), (a + layer, b + layer, c + layer, d + layer)])
+            face_labels.extend((2, 0))
     boundary = [idx(i, 0) for i in range(nx + 1)]
     boundary += [idx(nx, j) for j in range(1, ny + 1)]
     boundary += [idx(i, ny) for i in range(nx - 1, -1, -1)]
     boundary += [idx(0, j) for j in range(ny - 1, 0, -1)]
     for a, b in zip(boundary, boundary[1:] + boundary[:1]):
         faces.append((a, b, b + layer, a + layer))
+        ia, ja = divmod(a, ny + 1)
+        ib, jb = divmod(b, ny + 1)
+        face_labels.append(
+            3 if ja == jb == 0 else 1 if ja == jb == ny else 4 if ia == ib == 0 else 5
+        )
     obj = mesh_object(ctx, key, vertices, faces, collection)
     u = Vector(u)
     v = Vector(v)
     obj.location = origin
     obj.rotation_euler = Matrix((u, v, u.cross(v))).transposed().to_euler()
     obj["shed_plank"] = True
+    labels = obj.data.attributes.new("shed_uv_face", "INT", "FACE")
+    for item, value in zip(labels.data, face_labels):
+        item.value = value
     obj["shed_length"] = length
     obj["shed_width"] = width
     obj["shed_thickness"] = thickness
@@ -81,8 +91,25 @@ def deform(obj, s, attachments=None, loose=False, separation=None):
     cup = min(s.cup, thick * 0.35) * strength * rng.uniform(-1, 1)
     edge = min(s.edge, width * 0.025) * strength
     split = min(s.split, length * 0.14) * strength * rng.random()
-    damaged = rng.random() < s.broken * strength
-    shortened = length * rng.uniform(0.12, 0.28) * strength if damaged else 0
+    damage_rng = rng_for(s.seed, obj["shed_key"] + ".breaks")
+    damaged = damage_rng.random() < s.broken * strength and s.broken_max_percent > 0
+    mode = damage_rng.choice(("START", "END", "BOTH")) if damaged else "NONE"
+    total_cut = (
+        (length * s.broken_max_percent / 100 * strength * damage_rng.uniform(0.15, 1))
+        if damaged
+        else 0
+    )
+    start_share = (
+        damage_rng.uniform(0.25, 0.75)
+        if mode == "BOTH"
+        else (1 if mode == "START" else 0)
+    )
+    start_cut, end_cut = total_cut * start_share, total_cut * (1 - start_share)
+    # Keep the V split monotone even when a board is almost completely broken off.
+    split = min(split, (length - total_cut) * 0.10)
+    obj["shed_break_mode"] = mode
+    obj["shed_break_start"] = start_cut
+    obj["shed_break_end"] = end_cut
     detached = loose or rng.random() < s.loose * strength
     separation = min(0.15, separation if separation is not None else s.separation) * (
         1 if loose else strength
@@ -97,9 +124,14 @@ def deform(obj, s, attachments=None, loose=False, separation=None):
     obj["shed_broken"] = damaged
     for vertex in obj.data.vertices:
         x, y, z = vertex.co
-        original_x = x
         t = x / max(length, 1e-6)
         q = y / max(width, 1e-6)
+        left = start_cut * (0.8 + 0.2 * math.cos(q * math.pi * 4 + phase))
+        right = end_cut * (0.8 + 0.2 * math.sin(q * math.pi * 4 - phase))
+        # A monotone remap leaves a positive solid even at the 95% damage limit.
+        x = left + (length - left - right) * t
+        original_x = x
+        t = x / max(length, 1e-6)
         # Smooth envelope is exactly zero at supported cross-sections.
         if x < points[0]:
             envelope = min(1, (points[0] - x) / 0.12) ** 2
@@ -124,7 +156,6 @@ def deform(obj, s, attachments=None, loose=False, separation=None):
         # End boundary indents at the center, leaving a real V-shaped split.
         notch = max(0, 1 - abs(q - 0.5) * 6)
         x += split * notch * (1 - t) ** 6
-        x -= shortened * t**3 * (0.85 + 0.15 * math.cos(q * math.pi * 4 + phase))
         y = width / 2 + ry + edge * math.sin(original_x * 3.1 + phase) * (2 * q - 1)
         vertex.co = (x, y, rz + offset)
     obj.data.update()

@@ -3,7 +3,29 @@
 Validated in the supplied cloud environment with **Blender 4.3.2**, Cycles CPU,
 and four render threads. No additional runtime Python packages are required.
 
-## Completed checks
+## Version 1.1 change validation
+
+- **8 new integration tests passed**: the reference-connected board/stud net;
+  deterministic, bounded, non-overlapping material atlases; retained UV edits;
+  both hinge sides on all walls; stud-width door headers; start/end/both breakage
+  with a combined percentage cap; bounded gamma-weighted gaps; gap-constrained
+  crookedness; and new setting defaults, round-tripping, and validation.
+- **All 16 existing production regressions passed** with the new generator.
+- **Fresh ZIP install and persistence passed** in an isolated Blender profile,
+  including reopening the saved crooked-board scene and its UV layers.
+- **Cycles light-transport regression passed again**: 0 versus 748 unblocked
+  rays out of 4,753; mean diagnostic RGB 0.001587 versus 0.016522.
+- The UV reference SVG is exported from actual generated mesh UVs by
+  `scripts/export_uv_reference.py`. It is not an artist mockup.
+
+Run the new checks with:
+
+```sh
+blender --background --factory-startup --threads 4 --python-exit-code 1 \
+  --python tests/test_builder_v11.py
+```
+
+## Original staged baseline (version 1.0)
 
 - **Stages 1–9:** all passed. Each saved its own `.blend` test scene.
   Solid mesh counts were 83, 231, 363, 421, 421, 421, 421, 420, and 420.

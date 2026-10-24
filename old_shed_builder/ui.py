@@ -46,7 +46,17 @@ GROUPS = [
             "floor_thickness",
         ),
     ),
-    ("Cladding", ("plank_width", "plank_thickness", "plank_gap")),
+    (
+        "Cladding",
+        (
+            "plank_width",
+            "plank_thickness",
+            "plank_gap",
+            "gap_randomizer",
+            "gap_weight",
+            "crooked",
+        ),
+    ),
     (
         "Roof",
         (
@@ -68,6 +78,7 @@ GROUPS = [
             "edge",
             "split",
             "broken",
+            "broken_max_percent",
             "loose",
             "separation",
             "seed",
@@ -128,7 +139,8 @@ class SHED_PT_openings(bpy.types.Panel):
                 col.prop(op, prop)
             if key != "door":
                 col.prop(op, "bottom")
-        for prop in ("door_angle", "glass", "broken_glass", "shutters"):
+        layout.label(text="Door header height follows Stud width.")
+        for prop in ("door_hinge", "door_angle", "glass", "broken_glass", "shutters"):
             layout.prop(p, prop)
 
 

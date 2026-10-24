@@ -45,6 +45,9 @@ class Settings:
     plank_width: float = 0.18
     plank_thickness: float = 0.022
     plank_gap: float = 0.004
+    gap_randomizer: float = 0.0
+    gap_weight: float = 1.0
+    crooked: float = 0.0
     roof_pitch: float = 30.0
     overhang: float = 0.25
     rafter_depth: float = 0.12
@@ -53,6 +56,7 @@ class Settings:
     collar_ties: bool = True
     sheathing: bool = True
     door_angle: float = 18.0
+    door_hinge: str = "LEFT"
     glass: bool = True
     broken_glass: bool = True
     shutters: bool = True
@@ -62,6 +66,7 @@ class Settings:
     edge: float = 0.002
     split: float = 0.07
     broken: float = 0.035
+    broken_max_percent: float = 28.0
     loose: float = 0.04
     separation: float = 0.018
     seed: int = 17
@@ -94,6 +99,9 @@ class Settings:
     @property
     def floor_z(self):
         return self.foundation_height + self.joist_depth + self.floor_thickness
+
+    def header_height(self, name):
+        return self.stud_width if name == "door" else self.header_depth
 
     def span(self, wall):
         return self.width if wall in ("Front", "Rear") else self.length
@@ -167,6 +175,8 @@ def validate(s):
         if not low <= getattr(s, name) <= high:
             errors.append(f"{name} must be between {low} and {high}")
     for name in (
+        "gap_randomizer",
+        "crooked",
         "variation",
         "aging",
         "roughness",
@@ -197,6 +207,12 @@ def validate(s):
     ]:
         if not 0 <= getattr(s, name) <= limit:
             errors.append(f"{name} must be in [0,{limit}]")
+    if not 0.05 <= s.gap_weight <= 8:
+        errors.append("Gap weight must be in [0.05,8]")
+    if not 0 <= s.broken_max_percent <= 95:
+        errors.append("Broken max percent must be in [0,95]")
+    if s.door_hinge not in ("LEFT", "RIGHT"):
+        errors.append("Door hinge must be LEFT or RIGHT")
     if not -170 <= s.door_angle <= 170:
         errors.append("Door angle must be in [-170,170] degrees")
     if s.schema != 1:
@@ -237,7 +253,7 @@ def validate(s):
                 errors.append(f"{name}: opening must fit between corner framing")
             if (
                 op.bottom < 0
-                or op.bottom + op.height + s.header_depth
+                or op.bottom + op.height + s.header_height(name)
                 > s.wall_height - 2 * s.stud_width
             ):
                 errors.append(f"{name}: opening/header must fit below top plates")

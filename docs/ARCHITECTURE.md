@@ -47,7 +47,9 @@ restored explicitly or applied automatically from the active scene camera.
 - geometry.py: mesh primitives, member orientation, semantic IDs
 - foundation.py / floor.py / framing.py / cladding.py / roof.py / openings.py
 - wood.py: subdivided solid boards with continuous deformation fields
-- materials.py: procedural wood, metal, glass
+- materials.py: procedural wood, metal, glass, one material per UV group
+- uvs.py: connected timber nets, seam marking, material atlases, preserved-UV reservations
+- crooked.py: deterministic gap-constrained siding rotation using projected silhouettes
 - visibility.py: composed viewport/render visibility and camera profiles
 - generator.py: transactional selective rebuild, ownership, bake
 - properties.py / operators.py / ui.py: Blender API and persistent sidebar
@@ -62,3 +64,15 @@ artifacts, not source. Use `python scripts/package.py` to package the add-on.
 This is a scenic mesh generator, not an engineered building design or a
 structural load analysis. Preserved manual geometry can become incompatible
 with later dimensions; rebuild reports retained edits rather than discarding them.
+
+## Version 1.1 updates
+
+Existing schema-1 settings remain readable; missing new fields use dataclass/RNA
+defaults. Door headers use stud_width while window headers use header_depth.
+Handing is exterior-relative. Damage chooses start/end/both, with a total length
+cap. Gap randomization and crookedness are cladding-only update fields.
+
+UV construction precedes deformation, retaining rest-shape coordinates. Atlas
+packing occurs inside the staging transaction, after choosing replacements and
+reserving retained objects' UV space. Both a shared material and an atlas group
+identify painting sets. Legacy sheds need one full rebuild before partial updates.

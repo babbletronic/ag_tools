@@ -18,11 +18,16 @@ from . import (
     wood,
     materials,
     visibility,
+    uvs,
+    crooked,
 )
 
 MATERIAL_FIELDS = {"aging", "roughness", "grain", "dirt", "water", "color_variation"}
 FRAMING_FIELDS = {"header_depth", "collar_ties"}
 CLADDING_FIELDS = {
+    "gap_randomizer",
+    "gap_weight",
+    "crooked",
     "leakage",
     "leak_gap",
     "leak_variation",
@@ -128,7 +133,7 @@ def check_scope(root, s, scope):
         return
     if not root:
         raise ValueError("Generate a complete shed before selective updates")
-    previous = json.loads(root["shed_settings"])
+    previous = Settings.from_dict(json.loads(root["shed_settings"])).to_dict()
     current = s.to_dict()
 
     def equivalent(a, b):
@@ -158,6 +163,10 @@ def generate(s=None, stage=10, root=None, scope="ALL"):
     validate(s)
     if scope not in ("ALL", "FRAMING", "CLADDING", "MATERIALS"):
         raise ValueError("Unknown update scope")
+    if root and scope != "ALL" and not root.get("shed_uv_version"):
+        raise ValueError(
+            "Rebuild All once to upgrade this shed to connected UV atlases"
+        )
     check_scope(root, s, scope)
     if root and scope == "MATERIALS":
         objects = owned(root)
@@ -213,30 +222,6 @@ def generate(s=None, stage=10, root=None, scope="ALL"):
         stage=stage,
         objects=[],
     )
-    try:
-        foundation.build(ctx, s)
-        framing.build(ctx, s)
-        if stage >= 2:
-            floor.build(ctx, s)
-            roof.build(ctx, s)
-        if stage >= 3:
-            ctx.component = "cladding"
-            cladding.build(ctx, s)
-        if stage >= 4:
-            ctx.component = "fixtures"
-            openings.build(ctx, s)
-        if stage >= 5:
-            wood.deform_all(ctx, s)
-        if stage >= 6:
-            materials.assign(ctx, s, ctx.objects)
-    except Exception:
-        for obj in reversed(ctx.objects):
-            discard(obj)
-        if created_root:
-            bpy.data.objects.remove(root, do_unlink=True)
-        remove_tree(staging)
-        cleanup_materials(owner)
-        raise
     targets = (
         {"framing"}
         if scope == "FRAMING"
@@ -258,13 +243,46 @@ def generate(s=None, stage=10, root=None, scope="ALL"):
                 for o in old_objects
                 if o.get("shed_component") == "fixtures"
             )
-    accepted = []
-    for obj in ctx.objects:
-        key = obj["shed_key"]
-        component = obj["shed_component"]
-        if key in preserved or (targets is not None and component not in targets):
-            continue
-        accepted.append(obj)
+    retained = [
+        o
+        for o in old_objects
+        if o["shed_key"] in preserved
+        or (targets is not None and o["shed_component"] not in targets)
+    ]
+    try:
+        foundation.build(ctx, s)
+        framing.build(ctx, s)
+        if stage >= 2:
+            floor.build(ctx, s)
+            roof.build(ctx, s)
+        if stage >= 3:
+            ctx.component = "cladding"
+            cladding.build(ctx, s)
+        if stage >= 4:
+            ctx.component = "fixtures"
+            openings.build(ctx, s)
+        uvs.unwrap_objects(ctx.objects)
+        if stage >= 5:
+            wood.deform_all(ctx, s)
+            crooked.fit(ctx, s, retained)
+        if stage >= 6:
+            materials.assign(ctx, s, ctx.objects, reuse=retained)
+        accepted = []
+        for obj in ctx.objects:
+            key = obj["shed_key"]
+            component = obj["shed_component"]
+            if key in preserved or (targets is not None and component not in targets):
+                continue
+            accepted.append(obj)
+        uvs.pack_objects(accepted, retained)
+    except Exception:
+        for obj in reversed(ctx.objects):
+            discard(obj)
+        if created_root:
+            bpy.data.objects.remove(root, do_unlink=True)
+        remove_tree(staging)
+        cleanup_materials(owner)
+        raise
     accepted_set = set(accepted)
     # Capture user collection links before replacing owned objects.
     extra_links = {
@@ -298,6 +316,8 @@ def generate(s=None, stage=10, root=None, scope="ALL"):
         staging.hide_render = False
     root["shed_settings"] = json.dumps(s.to_dict(), sort_keys=True)
     root["shed_stage"] = stage
+    root["shed_uv_version"] = 1
+    root["shed_version"] = "1.1.0"
     root["shed_preserved_count"] = len(preserved)
     if stage >= 7:
         visibility.apply(root)

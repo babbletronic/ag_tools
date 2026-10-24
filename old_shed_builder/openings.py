@@ -80,6 +80,13 @@ def build(ctx, s):
                 s.plank_thickness / 2,
             )
             if name == "door":
+                # Handing is defined as seen from outside each wall.
+                hinge_low = (s.door_hinge == "LEFT") != reverse
+                hinge_u = a + jamb + 0.004 if hinge_low else b - jamb - 0.004
+
+                def handed(u):
+                    return u if hinge_low else a + b - u
+
                 pivot = bpy.data.objects.new(f"{wall}.door.hinge_pivot", None)
                 c.objects.link(pivot)
                 pivot.parent = ctx.root
@@ -89,9 +96,7 @@ def build(ctx, s):
                 if hasattr(ctx, "objects"):
                     ctx.objects.append(pivot)
                 hinge = Vector(
-                    wall_point(
-                        s, wall, a + jamb + 0.004, s.floor_z + 0.012, depth / 2 + 0.015
-                    )
+                    wall_point(s, wall, hinge_u, s.floor_z + 0.012, depth / 2 + 0.015)
                 )
                 pivot.location = hinge
                 leaf = []
@@ -145,14 +150,14 @@ def build(ctx, s):
                         wall_point(
                             s,
                             wall,
-                            a + jamb + 0.05,
+                            handed(a + jamb + 0.05),
                             s.floor_z + 0.30,
                             depth / 2 - 0.014,
                         ),
                         wall_point(
                             s,
                             wall,
-                            b - jamb - 0.05,
+                            handed(b - jamb - 0.05),
                             s.floor_z + h - 0.30,
                             depth / 2 - 0.014,
                         ),
@@ -165,9 +170,7 @@ def build(ctx, s):
                     cylinder(
                         ctx,
                         f"{wall}.door.hinge.{i}",
-                        wall_point(
-                            s, wall, a + jamb + 0.004, s.floor_z + z, depth / 2 + 0.015
-                        ),
+                        wall_point(s, wall, hinge_u, s.floor_z + z, depth / 2 + 0.015),
                         0.012,
                         0.10,
                         c,
@@ -175,7 +178,7 @@ def build(ctx, s):
                     leaf.append(
                         timber(
                             f"door.hinge.strap.{i}",
-                            a + jamb + 0.13,
+                            handed(a + jamb + 0.13),
                             z,
                             0.25,
                             0.035,
@@ -187,7 +190,7 @@ def build(ctx, s):
                 leaf.append(
                     timber(
                         "door.handle",
-                        b - jamb - 0.09,
+                        handed(b - jamb - 0.09),
                         h * 0.5,
                         0.025,
                         0.14,
@@ -200,6 +203,8 @@ def build(ctx, s):
                     obj.parent = pivot
                     obj.location -= hinge
                 direction = -1 if wall in ("Front", "Right") else 1
+                direction *= 1 if hinge_low else -1
+                pivot["shed_hinge_side"] = s.door_hinge
                 pivot.rotation_euler.z = direction * math.radians(s.door_angle)
             else:
                 timber(

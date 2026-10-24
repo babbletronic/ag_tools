@@ -37,11 +37,12 @@ def build(ctx, s):
         for name, o in s.openings(wall):
             a, b = o.position - o.width / 2, o.position + o.width / 2
             end = o.bottom + o.height
+            header_height = s.header_height(name)
             for side, x in [("L", a - 1.5 * sw), ("R", b + 1.5 * sw)]:
                 timber(f"{name}.king.{side}", x - sw / 2, x + sw / 2, sw, top - sw)
             for side, x in [("L", a - sw / 2), ("R", b + sw / 2)]:
                 timber(f"{name}.jack.{side}", x - sw / 2, x + sw / 2, sw, end - sw)
-            timber(f"{name}.header", a - sw, b + sw, end, s.header_depth)
+            timber(f"{name}.header", a - sw, b + sw, end, header_height)
             if name != "door":
                 timber(f"{name}.sill", a, b, o.bottom - sw, sw)
             occupied.append((a - 2 * sw, b + 2 * sw))
@@ -52,8 +53,8 @@ def build(ctx, s):
                     f"{name}.cripple.upper.{i}",
                     x - sw / 2,
                     x + sw / 2,
-                    end + s.header_depth,
-                    top - end - s.header_depth,
+                    end + header_height,
+                    top - end - header_height,
                 )
                 if name != "door":
                     timber(

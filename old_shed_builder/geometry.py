@@ -90,4 +90,5 @@ def prism(ctx, key, profile, depth, collection, material="Wood"):
     bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
     bm.to_mesh(obj.data)
     bm.free()
+    obj["shed_uv_primitive"] = "PRISM"
     return obj
